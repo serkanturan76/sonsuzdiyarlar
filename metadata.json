@@ -1,0 +1,5 @@
+{
+  "name": "Infinite Realms",
+  "description": "An infinite choose-your-own-adventure engine with consistent AI-generated visuals, dynamic inventory tracking, and an integrated AI companion.",
+  "requestFramePermissions": []
+}
