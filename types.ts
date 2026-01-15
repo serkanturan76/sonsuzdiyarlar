@@ -12,6 +12,7 @@ export interface GameState {
   inventory: string[];
   quest: string;
   isLoading: boolean;
+  characterName: string;
 }
 
 export interface AdventureResponse {
@@ -31,10 +32,7 @@ export interface ChatMessage {
   text: string;
 }
 
-// Window augmentation for aistudio
 declare global {
-  // We define the AIStudio interface to match the existing global declaration's type.
-  // We do not redeclare 'aistudio' on Window to avoid "Subsequent property declarations" conflict.
   interface AIStudio {
     hasSelectedApiKey: () => Promise<boolean>;
     openSelectKey: () => Promise<void>;

@@ -31,6 +31,16 @@ const Sidebar: React.FC<SidebarProps> = ({ gameState, setGameState, isOpen, togg
           </button>
         </div>
 
+        <div className="mb-6">
+          <h3 className="text-amber-500 font-bold uppercase tracking-widest text-sm mb-4 border-b border-slate-700 pb-2">
+            Karakter
+          </h3>
+          <p className="text-white font-ornate text-xl flex items-center gap-2">
+            <span className="material-symbols-outlined text-amber-600">person</span>
+            {gameState.characterName}
+          </p>
+        </div>
+
         <div className="mb-8">
           <h3 className="text-amber-500 font-bold uppercase tracking-widest text-sm mb-4 border-b border-slate-700 pb-2">
             Mevcut Görev
@@ -70,7 +80,7 @@ const Sidebar: React.FC<SidebarProps> = ({ gameState, setGameState, isOpen, togg
                 Oyunu Bitir & Kaydet
             </button>
             <p className="text-xs text-slate-500 text-center mt-2">
-                Hikaye arşive yazılacak.
+                Karakter özeti arşive yazılacak.
             </p>
         </div>
       </aside>

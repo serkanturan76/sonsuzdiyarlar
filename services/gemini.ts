@@ -4,89 +4,55 @@ import { WORLD_LORE as FALLBACK_LORE } from "../data/lore";
 import { SESSION_ARCHIVES as FALLBACK_ARCHIVES } from "../data/archives";
 import { ENV } from "../utils/env";
 
-// Helper to ensure we have an API key or prompt selection
 const getAIClient = async () => {
-  // 1. Priority: Check Environment Variable (For Netlify Deployment)
-  if (ENV.GEMINI_API_KEY) {
-    return new GoogleGenAI({ apiKey: ENV.GEMINI_API_KEY });
-  }
-
-  // 2. Fallback: Check AI Studio window object (For Local Dev in IDX)
+  if (ENV.GEMINI_API_KEY) return new GoogleGenAI({ apiKey: ENV.GEMINI_API_KEY });
   if (window.aistudio) {
-      const hasKey = await window.aistudio.hasSelectedApiKey();
-      if (!hasKey) {
-          throw new Error("API Key selection required");
-      }
-      // Note: In AI Studio environment, the key is injected automatically if selected.
-      // We safely check for process.env before accessing it to avoid browser crashes.
+      await window.aistudio.hasSelectedApiKey();
       const fallbackKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : '';
       return new GoogleGenAI({ apiKey: fallbackKey || '' });
   }
-  
-  throw new Error("API Key not found. Please set VITE_GEMINI_API_KEY in your environment variables.");
+  throw new Error("API Key missing");
 };
 
-// Modified to accept dynamic lore and archives
+const MAIN_MODEL = "gemini-3-flash-preview"; 
+const CHAT_MODEL = "gemini-3-flash-preview";
+const IMAGE_MODEL = "gemini-2.5-flash-image"; 
+
 export const generateAdventureStep = async (
   history: { text: string; choice: string }[],
   currentInventory: string[],
   currentQuest: string,
   dynamicLore: string | null,
-  dynamicArchives: string | null
+  dynamicArchives: string | null,
+  characterResumeContext: string | null = null
 ): Promise<AdventureResponse> => {
   const ai = await getAIClient();
-  
-  // Use dynamic data if available, otherwise fallback to local files
   const activeLore = dynamicLore || FALLBACK_LORE;
   const activeArchives = dynamicArchives || FALLBACK_ARCHIVES;
 
-  const systemInstruction = `
-    Sen "Aethelgard" dünyasında geçen sonsuz bir macera oyunu için Zindan Efendisisin (DM).
-    Görevin, oyuncuyu aşağıda belirtilen KESİN VE DEĞİŞMEZ dünya kuralları (Lore) ve geçmiş olaylar (Archives) ışığında yönetmektir.
-    
-    === DÜNYA İNCİLİ (LORE) ===
-    ${activeLore}
-    
-    === GEÇMİŞ OLAYLAR VE DÜNYA DURUMU (ARCHIVES) ===
-    ${activeArchives}
-    
-    KURALLAR:
-    1. Etkileyici, betimleyici bir anlatı metni yaz (100-150 kelime). DİL: TÜRKÇE.
-    2. Sadece "Aethelgard" coğrafyasını kullan. Yeni kıtalar veya büyük şehirler uydurma. Lore'a sadık kal.
-    3. Arşivdeki olaylara ince atıflarda bulun (Örn: "Güneyden gelen kara bulutlar..." veya "Kuzeydeki kayıp amulet söylentileri...").
-    4. Oyuncu için 3-4 farklı, anlamlı seçenek sun.
-    5. Oyuncunun Envanterini Yönet: Buldukları eşyaları ekle, kullandıklarını çıkar.
-    6. Mevcut Görevi (Quest) Yönet: Hikaye akışı önemli ölçüde değişirse güncelle.
-    7. Görsel İstemi (Image Prompt): Ortamı, karakteri ve ışığı betimleyen İngilizce bir prompt yaz.
-    
-    Mevcut Durum:
-    - Envanter: ${JSON.stringify(currentInventory)}
-    - Görev: ${currentQuest}
-  `;
+  const relevantHistory = history.slice(-5);
+  const historyText = relevantHistory.map(h => `H: ${h.text}\nS: ${h.choice}`).join("\n---\n");
 
-  const model = "gemini-flash-lite-latest";
-
-  const historyText = history.map(h => `Hikaye: ${h.text}\nOyuncu Seçimi: ${h.choice}`).join("\n---\n");
-  const prompt = history.length === 0 
-    ? "Yeni bir maceraya başla. Oyuncuyu Lore'a uygun rastgele bir bölgede (Kuzey, Güney, Doğu, Batı veya Merkez) başlat. Nerede olduğunu betimle." 
-    : `Aşağıdaki geçmişe dayanarak hikayeyi devam ettir. Lore'a sadık kal.\n\n${historyText}`;
+  const systemInstruction = `DM of Aethelgard. 
+Lore:\n${activeLore}
+Archives:\n${activeArchives}
+${characterResumeContext ? `RESUME CONTEXT: Bu karakterin önceki macerasının özeti: ${characterResumeContext}. Bu özeti temel alarak hikayeyi devam ettir.` : ''}
+Inventory: ${currentInventory.join(',')}
+Quest: ${currentQuest}
+RULES: Turkish text (100 words), 3-4 options, update inventory/quest. English image prompt.`;
 
   const response = await ai.models.generateContent({
-    model,
-    contents: prompt,
+    model: MAIN_MODEL,
+    contents: history.length === 0 ? "Start a new adventure." : `Continue:\n${historyText}`,
     config: {
       systemInstruction,
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          text: { type: Type.STRING, description: "Bu bölüm için anlatı metni (Türkçe)." },
-          options: { 
-            type: Type.ARRAY, 
-            items: { type: Type.STRING },
-            description: "Kullanıcı için 3-4 seçenek (Türkçe)."
-          },
-          imagePrompt: { type: Type.STRING, description: "Görüntü oluşturma için açıklama (İngilizce)." },
+          text: { type: Type.STRING },
+          options: { type: Type.ARRAY, items: { type: Type.STRING } },
+          imagePrompt: { type: Type.STRING },
           inventoryUpdate: {
             type: Type.OBJECT,
             properties: {
@@ -94,60 +60,38 @@ export const generateAdventureStep = async (
               remove: { type: Type.ARRAY, items: { type: Type.STRING } }
             }
           },
-          questUpdate: { type: Type.STRING, nullable: true, description: "Değiştiyse yeni görev metni (Türkçe), yoksa null." }
+          questUpdate: { type: Type.STRING, nullable: true }
         },
         required: ["text", "options", "imagePrompt", "inventoryUpdate"]
       }
     }
   });
 
-  if (!response.text) throw new Error("No response from AI");
-  return JSON.parse(response.text) as AdventureResponse;
+  return JSON.parse(response.text || "{}") as AdventureResponse;
 };
 
-// New function to summarize the session for the archives
 export const generateSessionSummary = async (history: { text: string; choice: string }[]): Promise<string> => {
   const ai = await getAIClient();
-  const model = "gemini-flash-lite-latest";
-  
-  const historyText = history.map(h => `Olay: ${h.text}\nSeçim: ${h.choice}`).join("\n");
-  
-  const prompt = `
-    Aşağıdaki oyun oturumunu 2-3 cümlelik kısa bir özet haline getir.
-    Önemli olayları, gidilen şehirleri ve yapılan büyük değişiklikleri belirt.
-    Üçüncü şahıs ağzından yaz (Örn: "Oyuncu Solaris'e gitti...").
-    
-    OTURUM GEÇMİŞİ:
-    ${historyText}
-  `;
-
   const response = await ai.models.generateContent({
-    model,
-    contents: prompt,
+    model: MAIN_MODEL,
+    contents: `Summarize this session in 2 sentences focusing on key achievements and current status: ${history.map(h => h.choice).join(' -> ')}`,
   });
-
-  return response.text || "Özet oluşturulamadı.";
+  return response.text || "Summary failed.";
 };
 
 export const generateSceneImage = async (prompt: string): Promise<string> => {
   const ai = await getAIClient();
-  const model = "gemini-3-pro-image-preview";
-  const fullPrompt = `${prompt}. World setting: Aethelgard fantasy realm. Art style: High fantasy digital painting, detailed textures, dramatic lighting, consistent character design, cinematic composition.`;
-
+  const fullPrompt = `${prompt}. Fantasy digital painting style, dark atmospheric.`;
   const response = await ai.models.generateContent({
-    model,
+    model: IMAGE_MODEL,
     contents: { parts: [{ text: fullPrompt }] },
-    config: {
-      imageConfig: { imageSize: "1K", aspectRatio: "16:9" }
-    }
+    config: { imageConfig: { aspectRatio: "16:9" } }
   });
 
   for (const part of response.candidates?.[0]?.content?.parts || []) {
-    if (part.inlineData) {
-      return `data:image/png;base64,${part.inlineData.data}`;
-    }
+    if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
   }
-  throw new Error("No image generated");
+  throw new Error("No image");
 };
 
 export const chatWithBot = async (
@@ -156,22 +100,11 @@ export const chatWithBot = async (
   loreContext: string | null
 ): Promise<string> => {
   const ai = await getAIClient();
-  const model = "gemini-3-pro-preview";
-  const activeLore = loreContext || FALLBACK_LORE;
-
   const chat = ai.chats.create({
-    model,
-    history: history.map(h => ({
-      role: h.role,
-      parts: [{ text: h.text }]
-    })),
-    config: {
-      systemInstruction: `Sen 'Aethelgard' (Sonsuz Diyarlar) dünyasındaki Diyar Kahinisin. 
-      REFERANS BİLGİLER: ${activeLore}
-      Görevin: Oyuncuya dünya hakkında bilgi ver, gizemli konuş, karakterden çıkma. Türkçe konuş.`
-    }
+    model: CHAT_MODEL,
+    history: history.slice(-6).map(h => ({ role: h.role, parts: [{ text: h.text }] })),
+    config: { systemInstruction: `Oracle of Aethelgard. Lore: ${loreContext || FALLBACK_LORE}. Speak Turkish, cryptic, helpful.` }
   });
-
   const result = await chat.sendMessage({ message: newMessage });
-  return result.text || "Sessiz kalıyorum.";
+  return result.text || "...";
 };

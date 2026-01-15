@@ -1,34 +1,49 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sonsuz Diyarlar</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,700;1,400&family=Cinzel:wght@700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#7f0df2",
+                        "background-light": "#f7f5f8",
+                        "background-dark": "#191022",
+                        "deep-black": "#0a0a0a",
+                        "blood-red": "#8a1c1c",
+                        "charcoal": "#1f1f23"
+                    },
+                    fontFamily: {
+                        "display": ["Be Vietnam Pro", "sans-serif"],
+                        "ornate": ["Cinzel", "serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Lato:wght@300;400;700&display=swap');
-      
-      body {
-        font-family: 'Lato', sans-serif;
-      }
-      h1, h2, h3, h4, h5, h6 {
-        font-family: 'Cinzel', serif;
-      }
-      
-      /* Custom Scrollbar */
       ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
+        width: 4px;
       }
       ::-webkit-scrollbar-track {
-        background: #1e293b; 
+        background: #0a0a0a; 
       }
       ::-webkit-scrollbar-thumb {
-        background: #475569; 
-        border-radius: 4px;
+        background: #4d3168; 
+        border-radius: 2px;
       }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #64748b; 
+      body {
+        font-family: 'Be Vietnam Pro', sans-serif;
+      }
+      h1, h2, h3, h4, .font-ornate {
+        font-family: 'Cinzel', serif;
       }
     </style>
   <script type="importmap">
@@ -43,7 +58,7 @@
 }
 </script>
 </head>
-  <body class="bg-slate-950 text-slate-200 overflow-hidden h-screen">
+  <body class="bg-background-dark text-slate-200 h-screen select-none overflow-hidden">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
