@@ -13,9 +13,9 @@ export const getEnv = (key: string): string => {
     // Ignore error if import.meta is not defined
   }
 
-  // 2. Try standard process.env
+  // 2. Try standard process.env safely
   try {
-    if (process.env && process.env[key]) {
+    if (typeof process !== 'undefined' && process.env && process.env[key]) {
       return process.env[key];
     }
   } catch (e) {

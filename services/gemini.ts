@@ -17,10 +17,10 @@ const getAIClient = async () => {
       if (!hasKey) {
           throw new Error("API Key selection required");
       }
-      // Note: In AI Studio environment, the key is injected automatically if selected
-      // We often access it via process.env.API_KEY, but here we assume the environment handles it
-      // if we are in the specific `window.aistudio` context.
-      return new GoogleGenAI({ apiKey: process.env.API_KEY });
+      // Note: In AI Studio environment, the key is injected automatically if selected.
+      // We safely check for process.env before accessing it to avoid browser crashes.
+      const fallbackKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : '';
+      return new GoogleGenAI({ apiKey: fallbackKey || '' });
   }
   
   throw new Error("API Key not found. Please set VITE_GEMINI_API_KEY in your environment variables.");
