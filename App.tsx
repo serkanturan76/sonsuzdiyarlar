@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { GameState, StorySegment } from './types';
 import Sidebar from './components/Sidebar';
@@ -34,18 +35,14 @@ const App: React.FC = () => {
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // 1. Auth & Data Init
   useEffect(() => {
     const init = async () => {
       setIsInitializing(true);
-      
       const { data: { session } } = await supabase?.auth.getSession() || { data: { session: null } };
       setUser(session?.user || null);
-
       supabase?.auth.onAuthStateChange((_event, session) => {
         setUser(session?.user || null);
       });
-
       const [loreData, archivesData] = await Promise.all([
         fetchWorldLore(),
         fetchArchives()
@@ -57,7 +54,6 @@ const App: React.FC = () => {
     init();
   }, []);
 
-  // When user signs in and character name is set, start or resume adventure
   useEffect(() => {
     if (user && gameState.characterName && gameState.history.length === 0) {
       handleStartAdventure(gameState.characterName);
@@ -72,12 +68,27 @@ const App: React.FC = () => {
   const handleStartAdventure = async (name: string) => {
     setGameState(prev => ({ ...prev, isLoading: true }));
     setLoadingMessage("Mazi inceleniyor...");
-    
-    // Check if character has a previous summary
     const lastSummary = await fetchLastLogForPlayer(name);
-    
-    // Begin adventure step with resume context if it exists
     handleChoice(lastSummary ? `Geçmişten Devam Et: ${lastSummary}` : "Macerayı Başlat", lastSummary);
+  };
+
+  // Görsel üretim olasılığını hesaplayan fonksiyon
+  const calculateImageProbability = (history: StorySegment[]) => {
+    if (history.length === 0) return 1.0; // İlk sayfa daima %100
+    
+    let gap = 0;
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].imageUrl) break;
+      gap++;
+    }
+
+    if (gap === 0) return 0.05; // Önceki görsel ise %5
+    if (gap === 1) return 0.20; // 1 sayfa boşluk %20
+    if (gap === 2) return 0.35; // 2 sayfa boşluk %35
+    if (gap === 3) return 0.50; // 3 sayfa boşluk %50
+    if (gap === 4) return 0.80; // 4 sayfa boşluk %80
+    if (gap === 5) return 0.90; // 5 sayfa boşluk %90
+    return 1.0; // 6+ sayfa boşluk %100
   };
 
   const handleChoice = async (choice: string, resumeContext: string | null = null) => {
@@ -109,7 +120,9 @@ const App: React.FC = () => {
         resumeContext
       );
 
-      const shouldGenerateImage = gameState.history.length === 0 || Math.random() < 0.2;
+      // Gelişmiş görsel üretim olasılık mantığı
+      const prob = calculateImageProbability(gameState.history);
+      const shouldGenerateImage = Math.random() < prob;
 
       let imageUrl: string | undefined = undefined;
       if (shouldGenerateImage) {
@@ -160,10 +173,7 @@ const App: React.FC = () => {
       try {
           const historyForSummary = gameState.history.map(h => ({ text: h.text, choice: h.userChoice || "Maceranın Sonu" }));
           const summary = await generateSessionSummary(historyForSummary);
-          
-          // Use Character Name for saving, NOT email
           await saveGameLog(gameState.characterName, summary);
-          
           alert(`${gameState.characterName}'in hikayesi mühürlendi.`);
           setGameState(INITIAL_STATE);
           const newArchives = await fetchArchives();

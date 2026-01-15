@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { AdventureResponse } from "../types";
 import { WORLD_LORE as FALLBACK_LORE } from "../data/lore";
@@ -14,6 +15,7 @@ const getAIClient = async () => {
   throw new Error("API Key missing");
 };
 
+// MALİYET OPTİMİZASYONU: Pro modeller yerine Flash modelleri kullanılıyor
 const MAIN_MODEL = "gemini-3-flash-preview"; 
 const CHAT_MODEL = "gemini-3-flash-preview";
 const IMAGE_MODEL = "gemini-2.5-flash-image"; 
@@ -30,16 +32,17 @@ export const generateAdventureStep = async (
   const activeLore = dynamicLore || FALLBACK_LORE;
   const activeArchives = dynamicArchives || FALLBACK_ARCHIVES;
 
+  // Bağlam Yönetimi: Sadece son 5 turu göndererek token tasarrufu sağlıyoruz
   const relevantHistory = history.slice(-5);
   const historyText = relevantHistory.map(h => `H: ${h.text}\nS: ${h.choice}`).join("\n---\n");
 
   const systemInstruction = `DM of Aethelgard. 
 Lore:\n${activeLore}
 Archives:\n${activeArchives}
-${characterResumeContext ? `RESUME CONTEXT: Bu karakterin önceki macerasının özeti: ${characterResumeContext}. Bu özeti temel alarak hikayeyi devam ettir.` : ''}
+${characterResumeContext ? `RESUME CONTEXT: Bu karakterin önceki macerasının özeti: ${characterResumeContext}.` : ''}
 Inventory: ${currentInventory.join(',')}
 Quest: ${currentQuest}
-RULES: Turkish text (100 words), 3-4 options, update inventory/quest. English image prompt.`;
+RULES: Turkish text (100 words), 3-4 options, update inventory/quest. English image prompt. BE CONCISE.`;
 
   const response = await ai.models.generateContent({
     model: MAIN_MODEL,
@@ -74,14 +77,14 @@ export const generateSessionSummary = async (history: { text: string; choice: st
   const ai = await getAIClient();
   const response = await ai.models.generateContent({
     model: MAIN_MODEL,
-    contents: `Summarize this session in 2 sentences focusing on key achievements and current status: ${history.map(h => h.choice).join(' -> ')}`,
+    contents: `Summarize this session in 2 sentences: ${history.map(h => h.choice).join(' -> ')}`,
   });
   return response.text || "Summary failed.";
 };
 
 export const generateSceneImage = async (prompt: string): Promise<string> => {
   const ai = await getAIClient();
-  const fullPrompt = `${prompt}. Fantasy digital painting style, dark atmospheric.`;
+  const fullPrompt = `${prompt}. Dark fantasy digital painting.`;
   const response = await ai.models.generateContent({
     model: IMAGE_MODEL,
     contents: { parts: [{ text: fullPrompt }] },
@@ -102,7 +105,7 @@ export const chatWithBot = async (
   const ai = await getAIClient();
   const chat = ai.chats.create({
     model: CHAT_MODEL,
-    history: history.slice(-6).map(h => ({ role: h.role, parts: [{ text: h.text }] })),
+    history: history.slice(-3).map(h => ({ role: h.role, parts: [{ text: h.text }] })), // Sohbet geçmişini kısıtla
     config: { systemInstruction: `Oracle of Aethelgard. Lore: ${loreContext || FALLBACK_LORE}. Speak Turkish, cryptic, helpful.` }
   });
   const result = await chat.sendMessage({ message: newMessage });
