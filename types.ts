@@ -13,6 +13,8 @@ export interface GameState {
   quest: string;
   isLoading: boolean;
   characterName: string;
+  remainingRequests: number;
+  nextResetTime: string | null; // ISO String
 }
 
 export interface AdventureResponse {
@@ -30,6 +32,11 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'model';
   text: string;
+}
+
+export interface UserLimit {
+  request_count: number;
+  last_reset_at: string;
 }
 
 declare global {

@@ -4,9 +4,10 @@ import { chatWithBot } from '../services/gemini';
 
 interface ChatWidgetProps {
     loreContext: string | null;
+    onMessageSent?: () => Promise<void>;
 }
 
-const ChatWidget: React.FC<ChatWidgetProps> = ({ loreContext }) => {
+const ChatWidget: React.FC<ChatWidgetProps> = ({ loreContext, onMessageSent }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: 'init', role: 'model', text: 'Selam gezgin. Rehberliğe mi ihtiyacın var?' }
@@ -36,6 +37,10 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ loreContext }) => {
       const history = messages.map(m => ({ role: m.role, text: m.text }));
       const response = await chatWithBot(history, userMsg.text, loreContext);
       
+      if (onMessageSent) {
+          await onMessageSent();
+      }
+
       const botMsg: ChatMessage = { id: (Date.now() + 1).toString(), role: 'model', text: response };
       setMessages(prev => [...prev, botMsg]);
     } catch (error) {

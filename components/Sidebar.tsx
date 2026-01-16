@@ -7,9 +7,10 @@ interface SidebarProps {
   isOpen: boolean;
   toggle: () => void;
   onSaveAndQuit: () => void;
+  onGoToCampsite: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ gameState, setGameState, isOpen, toggle, onSaveAndQuit }) => {
+const Sidebar: React.FC<SidebarProps> = ({ gameState, setGameState, isOpen, toggle, onSaveAndQuit, onGoToCampsite }) => {
   return (
     <>
       {/* Mobile Overlay */}
@@ -35,10 +36,36 @@ const Sidebar: React.FC<SidebarProps> = ({ gameState, setGameState, isOpen, togg
           <h3 className="text-amber-500 font-bold uppercase tracking-widest text-sm mb-4 border-b border-slate-700 pb-2">
             Karakter
           </h3>
-          <p className="text-white font-ornate text-xl flex items-center gap-2">
-            <span className="material-symbols-outlined text-amber-600">person</span>
-            {gameState.characterName}
-          </p>
+          <div className="flex justify-between items-center">
+             <p className="text-white font-ornate text-xl flex items-center gap-2">
+                <span className="material-symbols-outlined text-amber-600">person</span>
+                {gameState.characterName}
+             </p>
+             <span className="text-amber-500/80 font-mono text-lg tracking-widest" title="Kalan Eylem Hakkı">
+                {'.'.repeat(Math.max(0, 10 - gameState.remainingRequests.toString().length))}{gameState.remainingRequests}
+             </span>
+          </div>
+        </div>
+
+        {/* Long Rest Button */}
+        <div className="mb-8">
+            <button
+                onClick={onGoToCampsite}
+                disabled={gameState.remainingRequests > 0}
+                className={`w-full py-3 px-4 rounded border font-ornate uppercase tracking-widest transition-all duration-500 flex items-center justify-center gap-2 ${
+                    gameState.remainingRequests === 0 
+                    ? 'bg-indigo-900/80 border-indigo-500 text-indigo-100 hover:bg-indigo-800 shadow-[0_0_15px_rgba(99,102,241,0.4)] animate-pulse cursor-pointer' 
+                    : 'bg-slate-800/50 border-slate-700 text-slate-600 cursor-not-allowed opacity-50'
+                }`}
+            >
+                <span className="material-symbols-outlined">bedtime</span>
+                Long Rest
+            </button>
+            {gameState.remainingRequests === 0 && (
+                <p className="text-xs text-indigo-300 text-center mt-2 italic">
+                    Yorgunluktan bitkin düştün. Dinlenmelisin.
+                </p>
+            )}
         </div>
 
         <div className="mb-8">

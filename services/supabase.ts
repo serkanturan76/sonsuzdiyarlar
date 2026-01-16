@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { ENV } from '../utils/env';
+import { UserLimit } from '../types';
 
 // Only create client if credentials exist in Environment Variables
 export const supabase: SupabaseClient | null = (ENV.SUPABASE_URL && ENV.SUPABASE_KEY) 
@@ -72,3 +73,62 @@ export const signUp = (email: string, pass: string, characterName: string) =>
 export const signIn = (email: string, pass: string) => supabase?.auth.signInWithPassword({ email, password: pass });
 export const signOut = () => supabase?.auth.signOut();
 export const getUser = () => supabase?.auth.getUser();
+
+// --- LIMIT TRACKING METHODS ---
+
+export const getUserLimits = async (userId: string): Promise<UserLimit> => {
+  if (!supabase) return { request_count: 10, last_reset_at: new Date().toISOString() };
+
+  try {
+    const { data, error } = await supabase
+      .from('user_limits')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    const now = new Date();
+    
+    // Create if doesn't exist
+    if (error || !data) {
+      const newLimit = { user_id: userId, request_count: 10, last_reset_at: now.toISOString() };
+      await supabase.from('user_limits').upsert(newLimit);
+      return { request_count: 10, last_reset_at: now.toISOString() };
+    }
+
+    const lastReset = new Date(data.last_reset_at);
+    const diffHours = (now.getTime() - lastReset.getTime()) / (1000 * 60 * 60);
+
+    // If more than 24 hours passed, reset
+    if (diffHours >= 24) {
+      const updatedLimit = { ...data, request_count: 10, last_reset_at: now.toISOString() };
+      await supabase.from('user_limits').update(updatedLimit).eq('user_id', userId);
+      return { request_count: 10, last_reset_at: now.toISOString() };
+    }
+
+    return { request_count: data.request_count, last_reset_at: data.last_reset_at };
+  } catch (e) {
+    console.error("Error fetching limits:", e);
+    return { request_count: 10, last_reset_at: new Date().toISOString() };
+  }
+};
+
+export const decrementUserLimit = async (userId: string): Promise<number> => {
+  if (!supabase) return 10;
+  
+  try {
+    const { data } = await supabase
+      .from('user_limits')
+      .select('request_count')
+      .eq('user_id', userId)
+      .single();
+      
+    if (data && data.request_count > 0) {
+      const newCount = data.request_count - 1;
+      await supabase.from('user_limits').update({ request_count: newCount }).eq('user_id', userId);
+      return newCount;
+    }
+    return 0;
+  } catch (e) {
+    return 0;
+  }
+};

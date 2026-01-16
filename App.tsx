@@ -1,11 +1,11 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { GameState, StorySegment } from './types';
 import Sidebar from './components/Sidebar';
 import ChatWidget from './components/ChatWidget';
 import LandingPage from './components/LandingPage';
+import CampsitePage from './components/CampsitePage';
 import { generateAdventureStep, generateSceneImage, generateSessionSummary } from './services/gemini';
-import { fetchWorldLore, fetchArchives, fetchLastLogForPlayer, saveGameLog, supabase, signOut } from './services/supabase';
+import { fetchWorldLore, fetchArchives, fetchLastLogForPlayer, saveGameLog, supabase, signOut, getUserLimits, decrementUserLimit } from './services/supabase';
 import { ENV } from './utils/env';
 
 const INITIAL_STATE: GameState = {
@@ -14,6 +14,8 @@ const INITIAL_STATE: GameState = {
   quest: "Yolculuğuna başla.",
   isLoading: false,
   characterName: "",
+  remainingRequests: 10,
+  nextResetTime: null,
 };
 
 const LOADING_MESSAGES = [
@@ -23,11 +25,14 @@ const LOADING_MESSAGES = [
   "Gerçeklik perdesi aralanıyor...",
 ];
 
+type ViewState = 'landing' | 'game' | 'campsite';
+
 const App: React.FC = () => {
   const [user, setUser] = useState<any>(null);
   const [gameState, setGameState] = useState<GameState>(INITIAL_STATE);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
+  const [currentView, setCurrentView] = useState<ViewState>('landing');
   
   const [worldLore, setWorldLore] = useState<string | null>(null);
   const [archives, setArchives] = useState<string | null>(null);
@@ -60,39 +65,89 @@ const App: React.FC = () => {
     }
   }, [user, gameState.characterName]);
 
+  const checkLimitsAndRoute = async () => {
+    if (!user) return;
+    const limits = await getUserLimits(user.id);
+    
+    setGameState(prev => ({
+      ...prev,
+      remainingRequests: limits.request_count,
+      nextResetTime: limits.last_reset_at
+    }));
+
+    if (limits.request_count <= 0) {
+      setCurrentView('campsite');
+    } else {
+      setCurrentView('game');
+    }
+  };
+
+  const consumeRequest = async () => {
+    if (!user) return;
+    const newCount = await decrementUserLimit(user.id);
+    setGameState(prev => ({ ...prev, remainingRequests: newCount }));
+    if (newCount <= 0) {
+      // Allow user to finish reading current result, but next action will be blocked or show button
+    }
+  };
+
   const handleLogout = async () => {
     await signOut();
     setGameState(INITIAL_STATE);
+    setCurrentView('landing');
   };
 
   const handleStartAdventure = async (name: string) => {
+    // First, check limits
+    if (!user) return;
+    const limits = await getUserLimits(user.id);
+    
+    setGameState(prev => ({
+      ...prev,
+      characterName: name,
+      remainingRequests: limits.request_count,
+      nextResetTime: limits.last_reset_at
+    }));
+
+    if (limits.request_count <= 0) {
+      setCurrentView('campsite');
+      return;
+    } else {
+      setCurrentView('game');
+    }
+
     setGameState(prev => ({ ...prev, isLoading: true }));
     setLoadingMessage("Mazi inceleniyor...");
+    
     const lastSummary = await fetchLastLogForPlayer(name);
+    // Don't consume request for resuming/starting, only for generation
     handleChoice(lastSummary ? `Geçmişten Devam Et: ${lastSummary}` : "Macerayı Başlat", lastSummary);
   };
 
-  // Görsel üretim olasılığını hesaplayan fonksiyon
+  // Image probability logic
   const calculateImageProbability = (history: StorySegment[]) => {
-    if (history.length === 0) return 1.0; // İlk sayfa daima %100
-    
+    if (history.length === 0) return 1.0; 
     let gap = 0;
     for (let i = history.length - 1; i >= 0; i--) {
       if (history[i].imageUrl) break;
       gap++;
     }
-
-    if (gap === 0) return 0.05; // Önceki görsel ise %5
-    if (gap === 1) return 0.20; // 1 sayfa boşluk %20
-    if (gap === 2) return 0.35; // 2 sayfa boşluk %35
-    if (gap === 3) return 0.50; // 3 sayfa boşluk %50
-    if (gap === 4) return 0.80; // 4 sayfa boşluk %80
-    if (gap === 5) return 0.90; // 5 sayfa boşluk %90
-    return 1.0; // 6+ sayfa boşluk %100
+    if (gap === 0) return 0.05; 
+    if (gap === 1) return 0.20; 
+    if (gap === 2) return 0.35; 
+    if (gap === 3) return 0.50; 
+    if (gap === 4) return 0.80; 
+    if (gap === 5) return 0.90; 
+    return 1.0; 
   };
 
   const handleChoice = async (choice: string, resumeContext: string | null = null) => {
     if (gameState.isLoading && gameState.history.length > 0) return;
+    if (gameState.remainingRequests <= 0 && gameState.history.length > 0) {
+        alert("Gücün tükendi. Dinlenmelisin.");
+        setCurrentView('campsite');
+        return;
+    }
     
     setLoadingMessage(LOADING_MESSAGES[Math.floor(Math.random() * LOADING_MESSAGES.length)]);
     setGameState(prev => ({ ...prev, isLoading: true }));
@@ -120,7 +175,9 @@ const App: React.FC = () => {
         resumeContext
       );
 
-      // Gelişmiş görsel üretim olasılık mantığı
+      // Decrement Limit here as API was used
+      await consumeRequest();
+
       const prob = calculateImageProbability(gameState.history);
       const shouldGenerateImage = Math.random() < prob;
 
@@ -173,14 +230,22 @@ const App: React.FC = () => {
       try {
           const historyForSummary = gameState.history.map(h => ({ text: h.text, choice: h.userChoice || "Maceranın Sonu" }));
           const summary = await generateSessionSummary(historyForSummary);
+          await consumeRequest(); // Summary also uses API
+          
           await saveGameLog(gameState.characterName, summary);
           alert(`${gameState.characterName}'in hikayesi mühürlendi.`);
-          setGameState(INITIAL_STATE);
+          setGameState(prev => ({ ...INITIAL_STATE, characterName: prev.characterName })); 
           const newArchives = await fetchArchives();
           setArchives(newArchives);
+          // Check limits again to see if we should stay on game or go to landing/campsite
+          await checkLimitsAndRoute();
       } catch (e) {
           setGameState(prev => ({ ...prev, isLoading: false }));
       }
+  };
+
+  const onCampsiteWakeUp = async () => {
+      await checkLimitsAndRoute();
   };
 
   if (isInitializing) {
@@ -194,10 +259,17 @@ const App: React.FC = () => {
       );
   }
 
-  if (!user || !gameState.characterName) {
-    return <LandingPage onAuthSuccess={(name) => setGameState(prev => ({ ...prev, characterName: name }))} />;
+  // --- VIEW ROUTING ---
+
+  if (currentView === 'campsite') {
+      return <CampsitePage nextResetTime={gameState.nextResetTime} onReturnToGame={onCampsiteWakeUp} />;
   }
 
+  if (!user || !gameState.characterName || currentView === 'landing') {
+    return <LandingPage onAuthSuccess={(name) => handleStartAdventure(name)} />;
+  }
+
+  // Game View
   return (
     <div className="flex h-screen bg-background-dark text-slate-200 font-display">
       <div className="flex-1 flex flex-col relative h-full overflow-hidden">
@@ -274,8 +346,9 @@ const App: React.FC = () => {
         isOpen={isSidebarOpen} 
         toggle={() => setIsSidebarOpen(!isSidebarOpen)}
         onSaveAndQuit={handleSaveAndQuit}
+        onGoToCampsite={() => setCurrentView('campsite')}
       />
-      <ChatWidget loreContext={worldLore} />
+      <ChatWidget loreContext={worldLore} onMessageSent={consumeRequest} />
     </div>
   );
 };
