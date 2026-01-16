@@ -25,7 +25,7 @@ const LOADING_MESSAGES = [
   "Gerçeklik perdesi aralanıyor...",
 ];
 
-type ViewState = 'landing' | 'game' | 'campsite';
+type ViewState = 'landing' | 'checking_limits' | 'game' | 'campsite';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<any>(null);
@@ -38,7 +38,7 @@ const App: React.FC = () => {
   const [archives, setArchives] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
 
-  // Bu ref, oyunun açılışta iki kez API isteği göndermesini engeller (Strict Mode fix)
+  // Strict Mode double-fire prevention
   const adventureStartedRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -50,7 +50,7 @@ const App: React.FC = () => {
       supabase?.auth.onAuthStateChange((_event, session) => {
         setUser(session?.user || null);
         if (!session?.user) {
-             adventureStartedRef.current = false; // Reset lock on logout
+             adventureStartedRef.current = false;
         }
       });
       const [loreData, archivesData] = await Promise.all([
@@ -64,29 +64,57 @@ const App: React.FC = () => {
     init();
   }, []);
 
-  // Başlatma mantığı güncellendi: Ref kontrolü eklendi
+  // CENTRALIZED START LOGIC
+  // This effect listens for characterName. It is the ONLY place that triggers the game start.
   useEffect(() => {
-    if (user && gameState.characterName && gameState.history.length === 0 && !adventureStartedRef.current) {
-      adventureStartedRef.current = true; // Kilidi kapat
-      handleStartAdventure(gameState.characterName);
+    if (user && gameState.characterName && !adventureStartedRef.current) {
+      adventureStartedRef.current = true; // Lock immediately
+      initiateGameFlow(gameState.characterName);
     }
   }, [user, gameState.characterName]);
 
-  const checkLimitsAndRoute = async () => {
-    if (!user) return;
-    const limits = await getUserLimits(user.id);
-    
-    setGameState(prev => ({
-      ...prev,
-      remainingRequests: limits.request_count,
-      nextResetTime: limits.last_reset_at
-    }));
+  const initiateGameFlow = async (name: string) => {
+      if (!user) return;
 
-    if (limits.request_count <= 0) {
-      setCurrentView('campsite');
-    } else {
-      setCurrentView('game');
-    }
+      // 1. Show loading/checking state immediately
+      setCurrentView('checking_limits');
+      setLoadingMessage("Kader kontrol ediliyor...");
+      
+      // 2. Check limits BEFORE doing anything else
+      try {
+        const limits = await getUserLimits(user.id);
+        
+        setGameState(prev => ({
+          ...prev,
+          remainingRequests: limits.request_count,
+          nextResetTime: limits.last_reset_at
+        }));
+
+        // 3. Decision Point
+        if (limits.request_count <= 0) {
+          // No requests left? Go to campsite immediately.
+          setCurrentView('campsite');
+          // Do NOT call handleChoice. Stop here.
+          return;
+        }
+
+        // 4. Requests available? Proceed to Game.
+        setCurrentView('game');
+        
+        // Only fetch log and generate if history is empty (Start of session)
+        if (gameState.history.length === 0) {
+            setGameState(prev => ({ ...prev, isLoading: true }));
+            setLoadingMessage("Mazi inceleniyor...");
+            
+            const lastSummary = await fetchLastLogForPlayer(name);
+            await handleChoice(lastSummary ? `Geçmişten Devam Et: ${lastSummary}` : "Macerayı Başlat", lastSummary, true);
+        }
+
+      } catch (e) {
+        console.error("Init flow error", e);
+        // Fallback or error state
+        setCurrentView('game'); 
+      }
   };
 
   const consumeRequest = async () => {
@@ -102,48 +130,15 @@ const App: React.FC = () => {
     setCurrentView('landing');
   };
 
-  const handleStartAdventure = async (name: string) => {
-    if (!user) return;
-    
-    // Yükleme ekranını hemen göster
-    setGameState(prev => ({ ...prev, isLoading: true, characterName: name }));
-    setLoadingMessage("Mazi inceleniyor...");
-
-    const limits = await getUserLimits(user.id);
-    
-    setGameState(prev => ({
-      ...prev,
-      remainingRequests: limits.request_count,
-      nextResetTime: limits.last_reset_at
-    }));
-
-    if (limits.request_count <= 0) {
-      setGameState(prev => ({ ...prev, isLoading: false }));
-      setCurrentView('campsite');
-      return;
-    } else {
-      setCurrentView('game');
-    }
-    
-    const lastSummary = await fetchLastLogForPlayer(name);
-    // Loading state is passed true to handleChoice to prevent flickering
-    handleChoice(lastSummary ? `Geçmişten Devam Et: ${lastSummary}` : "Macerayı Başlat", lastSummary, true);
-  };
-
   // Image probability logic
   const calculateImageProbability = (history: StorySegment[]) => {
     if (history.length === 0) return 1.0; 
-    
     let gap = 0;
-    // Sondan başa doğru git, son görseli bul
     for (let i = history.length - 1; i >= 0; i--) {
       if (history[i].imageUrl) break;
       gap++;
     }
-    
-    console.log(`Image Generation Check: Gap is ${gap}`); // Debugging
-
-    if (gap === 0) return 0.05; // Önceki görsel ise %5
+    if (gap === 0) return 0.05; 
     if (gap === 1) return 0.20; 
     if (gap === 2) return 0.35; 
     if (gap === 3) return 0.50; 
@@ -153,9 +148,10 @@ const App: React.FC = () => {
   };
 
   const handleChoice = async (choice: string, resumeContext: string | null = null, isInitialLoad = false) => {
-    // Sıkı yükleme kontrolü: Eğer zaten yükleniyorsa ve bu ilk yükleme değilse durdur.
+    // Safety check: Don't run if loading (unless it's the very first forced load)
     if (gameState.isLoading && !isInitialLoad) return;
     
+    // Safety check: Don't run if no requests
     if (gameState.remainingRequests <= 0 && gameState.history.length > 0) {
         alert("Gücün tükendi. Dinlenmelisin.");
         setCurrentView('campsite');
@@ -166,6 +162,7 @@ const App: React.FC = () => {
     setLoadingMessage(LOADING_MESSAGES[Math.floor(Math.random() * LOADING_MESSAGES.length)]);
     setGameState(prev => ({ ...prev, isLoading: true }));
 
+    // Optimistic UI update for user choice
     if (gameState.history.length > 0) {
        setGameState(prev => {
            const newHistory = [...prev.history];
@@ -189,10 +186,10 @@ const App: React.FC = () => {
         resumeContext
       );
 
-      // Consume request AFTER successful generation text
+      // Decrement Limit
       await consumeRequest();
 
-      // Görsel olasılık hesaplaması - Güncel state yerine o anki context'i kullanıyoruz
+      // Image Logic
       const prob = calculateImageProbability(gameState.history);
       const shouldGenerateImage = Math.random() < prob;
 
@@ -253,29 +250,38 @@ const App: React.FC = () => {
           await saveGameLog(gameState.characterName, summary);
           alert(`${gameState.characterName}'in hikayesi mühürlendi.`);
           
-          // Reset game state completely but keep character name for potential quick restart if needed, 
-          // though we route to landing usually.
           adventureStartedRef.current = false; 
           setGameState(prev => ({ ...INITIAL_STATE, characterName: prev.characterName })); 
           
           const newArchives = await fetchArchives();
           setArchives(newArchives);
-          await checkLimitsAndRoute();
+          
+          // Re-check limits to decide where to go
+          if (user) {
+              const limits = await getUserLimits(user.id);
+              if (limits.request_count <= 0) {
+                  setCurrentView('campsite');
+              } else {
+                  setCurrentView('landing'); // Or stay in game/start new
+              }
+          }
       } catch (e) {
           setGameState(prev => ({ ...prev, isLoading: false }));
       }
   };
 
   const onCampsiteWakeUp = async () => {
-      await checkLimitsAndRoute();
+      // Re-run init flow
+      adventureStartedRef.current = true; // Manual lock
+      await initiateGameFlow(gameState.characterName);
   };
 
-  if (isInitializing) {
+  if (isInitializing || currentView === 'checking_limits') {
       return (
         <div className="flex h-screen w-screen items-center justify-center bg-background-dark text-slate-200">
              <div className="flex flex-col items-center gap-4">
                  <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-                 <p className="text-primary font-ornate">Dünya Yükleniyor...</p>
+                 <p className="text-primary font-ornate">{loadingMessage || "Dünya Yükleniyor..."}</p>
              </div>
         </div>
       );
@@ -286,7 +292,8 @@ const App: React.FC = () => {
   }
 
   if (!user || !gameState.characterName || currentView === 'landing') {
-    return <LandingPage onAuthSuccess={(name) => handleStartAdventure(name)} />;
+    // FIX: Only update state. Do NOT call logic here.
+    return <LandingPage onAuthSuccess={(name) => setGameState(prev => ({ ...prev, characterName: name }))} />;
   }
 
   return (
