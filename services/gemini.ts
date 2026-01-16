@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { AdventureResponse } from "../types";
 import { WORLD_LORE as FALLBACK_LORE } from "../data/lore";
@@ -17,7 +16,6 @@ const getAIClient = async () => {
 
 // MALİYET OPTİMİZASYONU: Pro modeller yerine Flash modelleri kullanılıyor
 const MAIN_MODEL = "gemini-3-flash-preview"; 
-const CHAT_MODEL = "gemini-3-flash-preview";
 const IMAGE_MODEL = "gemini-2.5-flash-image"; 
 
 export const generateAdventureStep = async (
@@ -98,16 +96,26 @@ export const generateSceneImage = async (prompt: string): Promise<string> => {
 };
 
 export const chatWithBot = async (
-  history: {role: 'user' | 'model', text: string}[], 
-  newMessage: string,
+  history: { role: string; text: string }[],
+  message: string,
   loreContext: string | null
 ): Promise<string> => {
   const ai = await getAIClient();
+  const activeLore = loreContext || FALLBACK_LORE;
+  
   const chat = ai.chats.create({
-    model: CHAT_MODEL,
-    history: history.slice(-3).map(h => ({ role: h.role, parts: [{ text: h.text }] })), // Sohbet geçmişini kısıtla
-    config: { systemInstruction: `Oracle of Aethelgard. Lore: ${loreContext || FALLBACK_LORE}. Speak Turkish, cryptic, helpful.` }
+    model: MAIN_MODEL,
+    config: {
+      systemInstruction: `You are the Oracle of Aethelgard. 
+Lore:\n${activeLore}
+Constraint: Be cryptic, mystical, but helpful. Keep answers short.`,
+    },
+    history: history.map(h => ({
+      role: h.role,
+      parts: [{ text: h.text }]
+    }))
   });
-  const result = await chat.sendMessage({ message: newMessage });
-  return result.text || "...";
+
+  const response = await chat.sendMessage({ message });
+  return response.text || "The spirits are silent.";
 };

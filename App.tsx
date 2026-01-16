@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GameState, StorySegment } from './types';
 import Sidebar from './components/Sidebar';
-import ChatWidget from './components/ChatWidget';
 import LandingPage from './components/LandingPage';
 import CampsitePage from './components/CampsitePage';
 import { generateAdventureStep, generateSceneImage, generateSessionSummary } from './services/gemini';
@@ -374,7 +373,6 @@ const App: React.FC = () => {
         onSaveAndQuit={handleSaveAndQuit}
         onGoToCampsite={() => setCurrentView('campsite')}
       />
-      <ChatWidget loreContext={worldLore} onMessageSent={consumeRequest} />
     </div>
   );
 };

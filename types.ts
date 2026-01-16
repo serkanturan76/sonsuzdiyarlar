@@ -28,15 +28,15 @@ export interface AdventureResponse {
   questUpdate: string | null;
 }
 
+export interface UserLimit {
+  request_count: number;
+  last_reset_at: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'model';
   text: string;
-}
-
-export interface UserLimit {
-  request_count: number;
-  last_reset_at: string;
 }
 
 declare global {
