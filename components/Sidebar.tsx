@@ -59,11 +59,16 @@ const Sidebar: React.FC<SidebarProps> = ({ gameState, setGameState, isOpen, togg
                 }`}
             >
                 <span className="material-symbols-outlined">bedtime</span>
-                Long Rest
+                Uzun Dinlenme
             </button>
             {gameState.remainingRequests === 0 && (
                 <p className="text-xs text-indigo-300 text-center mt-2 italic">
                     Yorgunluktan bitkin düştün. Dinlenmelisin.
+                </p>
+            )}
+             {gameState.remainingRequests > 0 && (
+                <p className="text-xs text-slate-500 text-center mt-2 italic">
+                    Henüz yorgun değilsin ({gameState.remainingRequests} eylem kaldı).
                 </p>
             )}
         </div>

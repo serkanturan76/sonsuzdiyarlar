@@ -5,7 +5,6 @@ import LandingPage from './components/LandingPage';
 import CampsitePage from './components/CampsitePage';
 import { generateAdventureStep, generateSceneImage, generateSessionSummary } from './services/gemini';
 import { fetchWorldLore, fetchArchives, fetchLastLogForPlayer, saveGameLog, supabase, signOut, getUserLimits, decrementUserLimit } from './services/supabase';
-import { ENV } from './utils/env';
 
 const INITIAL_STATE: GameState = {
   history: [],
@@ -41,17 +40,20 @@ const App: React.FC = () => {
   const adventureStartedRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // 1. Initial Data Load (Lore & Archives)
   useEffect(() => {
     const init = async () => {
       setIsInitializing(true);
       const { data: { session } } = await supabase?.auth.getSession() || { data: { session: null } };
       setUser(session?.user || null);
+      
       supabase?.auth.onAuthStateChange((_event, session) => {
         setUser(session?.user || null);
         if (!session?.user) {
              adventureStartedRef.current = false;
         }
       });
+
       const [loreData, archivesData] = await Promise.all([
         fetchWorldLore(),
         fetchArchives()
@@ -63,24 +65,23 @@ const App: React.FC = () => {
     init();
   }, []);
 
-  // CENTRALIZED START LOGIC
-  // This effect listens for characterName. It is the ONLY place that triggers the game start.
+  // 2. CENTRALIZED GAME START LOGIC
   useEffect(() => {
     if (user && gameState.characterName && !adventureStartedRef.current) {
-      adventureStartedRef.current = true; // Lock immediately
-      initiateGameFlow(gameState.characterName);
+      adventureStartedRef.current = true;
+      checkLimitsAndStart();
     }
   }, [user, gameState.characterName]);
 
-  const initiateGameFlow = async (name: string) => {
+  const checkLimitsAndStart = async () => {
       if (!user) return;
 
-      // 1. Show loading/checking state immediately
+      // A) Show Loading
       setCurrentView('checking_limits');
-      setLoadingMessage("Kader kontrol ediliyor...");
+      setLoadingMessage("Yıldızlar hizalanıyor...");
       
-      // 2. Check limits BEFORE doing anything else
       try {
+        // B) Check Limits & Reset Logic (handled in getUserLimits)
         const limits = await getUserLimits(user.id);
         
         setGameState(prev => ({
@@ -89,30 +90,35 @@ const App: React.FC = () => {
           nextResetTime: limits.last_reset_at
         }));
 
-        // 3. Decision Point
+        // C) Route based on limits
         if (limits.request_count <= 0) {
           // No requests left? Go to campsite immediately.
           setCurrentView('campsite');
-          // Do NOT call handleChoice. Stop here.
+          // Do NOT proceed to game generation.
           return;
         }
 
-        // 4. Requests available? Proceed to Game.
+        // D) Requests available? Proceed to Game.
         setCurrentView('game');
         
-        // Only fetch log and generate if history is empty (Start of session)
+        // E) Generate Initial Story ONLY if history is empty
         if (gameState.history.length === 0) {
             setGameState(prev => ({ ...prev, isLoading: true }));
             setLoadingMessage("Mazi inceleniyor...");
             
-            const lastSummary = await fetchLastLogForPlayer(name);
-            await handleChoice(lastSummary ? `Geçmişten Devam Et: ${lastSummary}` : "Macerayı Başlat", lastSummary, true);
+            // Check logs specifically for THIS character name
+            const lastSummary = await fetchLastLogForPlayer(gameState.characterName);
+            const startPrompt = lastSummary 
+                ? `Geçmişten Devam Et: ${lastSummary}` 
+                : "Macerayı Başlat (Giriş Sahnesi)";
+            
+            // Force `isInitialLoad` to true to bypass strict checks in handleChoice
+            await handleChoice(startPrompt, lastSummary, true);
         }
 
       } catch (e) {
         console.error("Init flow error", e);
-        // Fallback or error state
-        setCurrentView('game'); 
+        setCurrentView('landing'); 
       }
   };
 
@@ -131,7 +137,7 @@ const App: React.FC = () => {
 
   // Image probability logic
   const calculateImageProbability = (history: StorySegment[]) => {
-    if (history.length === 0) return 1.0; 
+    if (history.length === 0) return 1.0; // First slide ALWAYS has image
     let gap = 0;
     for (let i = history.length - 1; i >= 0; i--) {
       if (history[i].imageUrl) break;
@@ -152,9 +158,8 @@ const App: React.FC = () => {
     
     // Safety check: Don't run if no requests
     if (gameState.remainingRequests <= 0 && gameState.history.length > 0) {
-        alert("Gücün tükendi. Dinlenmelisin.");
-        setCurrentView('campsite');
-        setGameState(prev => ({ ...prev, isLoading: false }));
+        alert("Gücün tükendi. Kamp ateşine dönmelisin.");
+        // We don't force campsite view here immediately to allow user to save via sidebar
         return;
     }
     
@@ -194,7 +199,8 @@ const App: React.FC = () => {
 
       let imageUrl: string | undefined = undefined;
       
-      if (shouldGenerateImage) {
+      // If it's the very first load or probability hits
+      if (isInitialLoad || shouldGenerateImage) {
         setLoadingMessage("Evren resmediliyor...");
         try {
             imageUrl = await generateSceneImage(adventureData.imagePrompt);
@@ -235,44 +241,54 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSaveAndQuit = async () => {
-      if (gameState.history.length === 0) return;
+  const saveToLog = async () => {
+    if (gameState.history.length === 0) return;
+    setLoadingMessage("Hikaye arşivlere yazılıyor...");
+    setGameState(prev => ({ ...prev, isLoading: true }));
+    try {
+        const historyForSummary = gameState.history.map(h => ({ text: h.text, choice: h.userChoice || "Maceranın Sonu" }));
+        const summary = await generateSessionSummary(historyForSummary);
+        await consumeRequest(); // Consume 1 for summary generation if needed, or skip
+        
+        await saveGameLog(gameState.characterName, summary);
+        
+        const newArchives = await fetchArchives();
+        setArchives(newArchives);
+    } catch (e) {
+        console.error("Save error", e);
+    } finally {
+        setGameState(prev => ({ ...prev, isLoading: false }));
+    }
+  };
+
+  const handleManualSaveAndQuit = async () => {
       const confirmSave = window.confirm("Macerayı sonlandırıp kaydetmek istiyor musun?");
       if (!confirmSave) return;
-      setLoadingMessage("Hikaye arşivlere yazılıyor...");
-      setGameState(prev => ({ ...prev, isLoading: true }));
-      try {
-          const historyForSummary = gameState.history.map(h => ({ text: h.text, choice: h.userChoice || "Maceranın Sonu" }));
-          const summary = await generateSessionSummary(historyForSummary);
-          await consumeRequest(); 
-          
-          await saveGameLog(gameState.characterName, summary);
-          alert(`${gameState.characterName}'in hikayesi mühürlendi.`);
-          
-          adventureStartedRef.current = false; 
-          setGameState(prev => ({ ...INITIAL_STATE, characterName: prev.characterName })); 
-          
-          const newArchives = await fetchArchives();
-          setArchives(newArchives);
-          
-          // Re-check limits to decide where to go
-          if (user) {
-              const limits = await getUserLimits(user.id);
-              if (limits.request_count <= 0) {
-                  setCurrentView('campsite');
-              } else {
-                  setCurrentView('landing'); // Or stay in game/start new
-              }
-          }
-      } catch (e) {
-          setGameState(prev => ({ ...prev, isLoading: false }));
+      
+      await saveToLog();
+      alert(`${gameState.characterName}'in hikayesi mühürlendi.`);
+      
+      adventureStartedRef.current = false; 
+      setGameState(prev => ({ ...INITIAL_STATE, characterName: prev.characterName })); 
+      setCurrentView('landing');
+  };
+
+  // Called when sidebar Long Rest button is clicked
+  const handleLongRest = async () => {
+      const wantToSave = window.confirm("Kamp ateşine dönmeden önce bugünkü maceranı günlüğe kaydetmek ister misin?");
+      if (wantToSave) {
+          await saveToLog();
+          alert("Günlük güncellendi. İyi uykular.");
       }
+      
+      setGameState(prev => ({ ...prev, isLoading: false }));
+      setCurrentView('campsite');
   };
 
   const onCampsiteWakeUp = async () => {
       // Re-run init flow
       adventureStartedRef.current = true; // Manual lock
-      await initiateGameFlow(gameState.characterName);
+      checkLimitsAndStart();
   };
 
   if (isInitializing || currentView === 'checking_limits') {
@@ -291,7 +307,6 @@ const App: React.FC = () => {
   }
 
   if (!user || !gameState.characterName || currentView === 'landing') {
-    // FIX: Only update state. Do NOT call logic here.
     return <LandingPage onAuthSuccess={(name) => setGameState(prev => ({ ...prev, characterName: name }))} />;
   }
 
@@ -370,8 +385,8 @@ const App: React.FC = () => {
         setGameState={setGameState}
         isOpen={isSidebarOpen} 
         toggle={() => setIsSidebarOpen(!isSidebarOpen)}
-        onSaveAndQuit={handleSaveAndQuit}
-        onGoToCampsite={() => setCurrentView('campsite')}
+        onSaveAndQuit={handleManualSaveAndQuit}
+        onGoToCampsite={handleLongRest}
       />
     </div>
   );

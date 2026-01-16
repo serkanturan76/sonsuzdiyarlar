@@ -77,38 +77,55 @@ export const getUser = () => supabase?.auth.getUser();
 // --- LIMIT TRACKING METHODS ---
 
 export const getUserLimits = async (userId: string): Promise<UserLimit> => {
-  if (!supabase) return { request_count: 10, last_reset_at: new Date().toISOString() };
+  // Varsayılan değerler (Supabase yoksa veya hata olursa)
+  const defaultLimit = { request_count: 10, last_reset_at: new Date().toISOString() };
+  if (!supabase) return defaultLimit;
 
   try {
     const { data, error } = await supabase
       .from('user_limits')
       .select('*')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle(); // single yerine maybeSingle kullanıyoruz, kayıt yoksa null döner, hata fırlatmaz.
 
     const now = new Date();
-    
-    // Create if doesn't exist
-    if (error || !data) {
-      const newLimit = { user_id: userId, request_count: 10, last_reset_at: now.toISOString() };
-      await supabase.from('user_limits').upsert(newLimit);
+
+    // 1. DURUM: Kayıt hiç yoksa (SQL Trigger çalışmadıysa veya eski kullanıcıysa) oluştur.
+    if (!data) {
+      const newLimitPayload = { 
+        user_id: userId, 
+        request_count: 10, 
+        last_reset_at: now.toISOString() 
+      };
+      const { error: insertError } = await supabase.from('user_limits').insert(newLimitPayload);
+      if (insertError) console.error("Limit oluşturma hatası:", insertError);
       return { request_count: 10, last_reset_at: now.toISOString() };
     }
 
+    // 2. DURUM: Kayıt var, süreyi kontrol et.
     const lastReset = new Date(data.last_reset_at);
-    const diffHours = (now.getTime() - lastReset.getTime()) / (1000 * 60 * 60);
+    const diffTime = Math.abs(now.getTime() - lastReset.getTime());
+    const diffHours = diffTime / (1000 * 60 * 60);
 
-    // If more than 24 hours passed, reset
     if (diffHours >= 24) {
-      const updatedLimit = { ...data, request_count: 10, last_reset_at: now.toISOString() };
-      await supabase.from('user_limits').update(updatedLimit).eq('user_id', userId);
-      return { request_count: 10, last_reset_at: now.toISOString() };
+      // 24 saat geçmiş, hakları yenile
+      const refreshedLimit = { request_count: 10, last_reset_at: now.toISOString() };
+      await supabase
+        .from('user_limits')
+        .update(refreshedLimit)
+        .eq('user_id', userId);
+      return refreshedLimit;
     }
 
-    return { request_count: data.request_count, last_reset_at: data.last_reset_at };
+    // 24 saat geçmemiş, mevcut durumu döndür
+    return { 
+      request_count: data.request_count, 
+      last_reset_at: data.last_reset_at 
+    };
+
   } catch (e) {
-    console.error("Error fetching limits:", e);
-    return { request_count: 10, last_reset_at: new Date().toISOString() };
+    console.error("Supabase Limit Error:", e);
+    return defaultLimit;
   }
 };
 
@@ -116,6 +133,7 @@ export const decrementUserLimit = async (userId: string): Promise<number> => {
   if (!supabase) return 10;
   
   try {
+    // Önce güncel limiti al (transaction benzeri bir işlem için stored procedure daha iyi olurdu ama basit tutuyoruz)
     const { data } = await supabase
       .from('user_limits')
       .select('request_count')
@@ -129,6 +147,7 @@ export const decrementUserLimit = async (userId: string): Promise<number> => {
     }
     return 0;
   } catch (e) {
+    console.error("Decrement Error:", e);
     return 0;
   }
 };
