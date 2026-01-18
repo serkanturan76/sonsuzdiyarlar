@@ -158,8 +158,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onAuthSuccess }) => {
            <div className="grid md:grid-cols-3 gap-8">
               {/* North */}
               <div className="group bg-deep-black border border-white/5 rounded-2xl overflow-hidden hover:border-blue-500/30 transition-all flex flex-col shadow-2xl">
-                 <div className="h-40 bg-[url('https://images.unsplash.com/photo-1478720568477-152d9b164e26?auto=format&fit=crop&q=80&w=800')] bg-cover bg-center relative">
-                    <div className="absolute inset-0 bg-blue-900/40 mix-blend-multiply"></div>
+                 <div className="h-40 bg-gradient-to-br from-slate-900 to-blue-950 relative">
+                    <div className="absolute inset-0 bg-blue-900/10"></div>
                     <div className="absolute inset-0 bg-gradient-to-t from-deep-black to-transparent"></div>
                     <h4 className="absolute bottom-4 left-6 text-2xl font-ornate text-white uppercase">Kuzey</h4>
                  </div>
@@ -177,8 +177,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onAuthSuccess }) => {
 
               {/* Center */}
               <div className="group bg-deep-black border border-gold/20 rounded-2xl overflow-hidden hover:border-gold/50 transition-all flex flex-col scale-105 shadow-[0_20px_50px_rgba(207,130,23,0.1)] z-10">
-                 <div className="h-40 bg-[url('https://images.unsplash.com/photo-1500382017468-9049fee74a62?auto=format&fit=crop&q=80&w=800')] bg-cover bg-center relative">
-                    <div className="absolute inset-0 bg-gold/20 mix-blend-multiply"></div>
+                 <div className="h-40 bg-gradient-to-br from-slate-900 to-amber-950 relative">
+                    <div className="absolute inset-0 bg-gold/10"></div>
                     <div className="absolute inset-0 bg-gradient-to-t from-deep-black to-transparent"></div>
                     <h4 className="absolute bottom-4 left-6 text-2xl font-ornate text-white uppercase">Merkez</h4>
                  </div>
@@ -196,8 +196,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onAuthSuccess }) => {
 
               {/* South */}
               <div className="group bg-deep-black border border-white/5 rounded-2xl overflow-hidden hover:border-red-500/30 transition-all flex flex-col shadow-2xl">
-                 <div className="h-40 bg-[url('https://images.unsplash.com/photo-1508197149814-0cc02e8b7f74?auto=format&fit=crop&q=80&w=800')] bg-cover bg-center relative">
-                    <div className="absolute inset-0 bg-red-900/40 mix-blend-multiply"></div>
+                 <div className="h-40 bg-gradient-to-br from-slate-900 to-red-950 relative">
+                    <div className="absolute inset-0 bg-red-900/10"></div>
                     <div className="absolute inset-0 bg-gradient-to-t from-deep-black to-transparent"></div>
                     <h4 className="absolute bottom-4 left-6 text-2xl font-ornate text-white uppercase">Güney</h4>
                  </div>
