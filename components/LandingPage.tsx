@@ -93,7 +93,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onAuthSuccess }) => {
       </section>
 
       {/* --- WORLD GUIDE SECTION --- */}
-      <section id="world-guide" className="py-24 px-6 max-w-6xl mx-auto space-y-32">
+      <section id="world-guide" className="py-24 px-6 max-w-7xl mx-auto space-y-32">
         <div className="text-center space-y-4">
           <h2 className="text-5xl font-ornate text-white tracking-widest">AETHELGARD: KADİM TOPRAKLAR</h2>
           <div className="h-1 w-24 bg-primary mx-auto"></div>
@@ -155,7 +155,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onAuthSuccess }) => {
               <div className="h-px bg-white/10 w-full"></div>
            </div>
 
-           <div className="grid md:grid-cols-3 gap-8">
+           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
               {/* North */}
               <div className="group bg-deep-black border border-white/5 rounded-2xl overflow-hidden hover:border-blue-500/30 transition-all flex flex-col shadow-2xl">
                  <div className="h-40 bg-gradient-to-br from-slate-900 to-blue-950 relative">
@@ -176,7 +176,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onAuthSuccess }) => {
               </div>
 
               {/* Center */}
-              <div className="group bg-deep-black border border-gold/20 rounded-2xl overflow-hidden hover:border-gold/50 transition-all flex flex-col scale-105 shadow-[0_20px_50px_rgba(207,130,23,0.1)] z-10">
+              <div className="group bg-deep-black border border-gold/20 rounded-2xl overflow-hidden hover:border-gold/50 transition-all flex flex-col shadow-2xl z-10">
                  <div className="h-40 bg-gradient-to-br from-slate-900 to-amber-950 relative">
                     <div className="absolute inset-0 bg-gold/10"></div>
                     <div className="absolute inset-0 bg-gradient-to-t from-deep-black to-transparent"></div>
@@ -210,6 +210,86 @@ const LandingPage: React.FC<LandingPageProps> = ({ onAuthSuccess }) => {
                     <p className="text-xs text-slate-500 border-t border-white/5 pt-3">
                       <em>Tehlike:</em> Çamur İzcileri pusu kurar, geceleri hayaletler gezer.
                     </p>
+                 </div>
+              </div>
+
+              {/* West - Storm Coast */}
+              <div className="group bg-deep-black border border-white/5 rounded-2xl overflow-hidden hover:border-slate-400/30 transition-all flex flex-col shadow-2xl">
+                 <div className="h-40 bg-gradient-to-br from-slate-700 to-slate-900 relative">
+                    <div className="absolute inset-0 bg-white/5"></div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-deep-black to-transparent"></div>
+                    <h4 className="absolute bottom-4 left-6 text-2xl font-ornate text-white uppercase">Batı</h4>
+                 </div>
+                 <div className="p-6 space-y-4 flex-1">
+                    <h5 className="text-slate-300 font-bold uppercase tracking-widest text-xs">Fırtına Kıyıları</h5>
+                    <p className="text-sm text-slate-400 leading-relaxed italic">"Sürekli yağmurlu, gri ve rüzgarlı. Deniz hırçındır."</p>
+                    <p className="text-sm text-slate-300">
+                      <strong>Salt-Hollow (Tuzkovuğu):</strong> Kaçakçı limanı. Solaris yasalarının geçmediği tek "medeni" yer. Korsanlar ve Engizisyon'dan kaçan büyücüler burada saklanır.
+                    </p>
+                    <p className="text-xs text-slate-500 border-t border-white/5 pt-3">
+                      <em>Coğrafi Özellik:</em> <strong>The Maelstrom (Girdap):</strong> Dünyanın dibindeki deliğe açılan kapı olduğu söylenen devasa girdap.
+                    </p>
+                    <p className="text-[10px] text-red-500/60 uppercase font-bold">Tehlike: Sirenler</p>
+                 </div>
+              </div>
+
+              {/* East - Glass Deserts */}
+              <div className="group bg-deep-black border border-white/5 rounded-2xl overflow-hidden hover:border-purple-500/30 transition-all flex flex-col shadow-2xl">
+                 <div className="h-40 bg-gradient-to-br from-indigo-950 to-purple-950 relative">
+                    <div className="absolute inset-0 bg-purple-500/10"></div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-deep-black to-transparent"></div>
+                    <h4 className="absolute bottom-4 left-6 text-2xl font-ornate text-white uppercase">Doğu</h4>
+                 </div>
+                 <div className="p-6 space-y-4 flex-1">
+                    <h5 className="text-purple-400 font-bold uppercase tracking-widest text-xs">Cam Çölleri</h5>
+                    <p className="text-sm text-slate-400 leading-relaxed italic">"Büyük Çöküş'ün merkez üssü. Kum yerine kristalleşmiş cam kırıklarıyla kaplı."</p>
+                    <p className="text-sm text-slate-300">
+                      <strong>Toz Yürüyenler:</strong> Yerleşik hayat yok. Sadece dev böcek kabuklarından zırh yapan göçebe kabileler yaşar.
+                    </p>
+                    <p className="text-xs text-slate-500 border-t border-white/5 pt-3">
+                      <em>Landmark:</em> <strong>The Scar (Yara):</strong> Gökyüzüne mor ışık yayan, büyünün dünyaya sızdığı devasa çatlak.
+                    </p>
+                    <p className="text-[10px] text-red-500/60 uppercase font-bold">Tehlike: Kristal Akrepler & Seraplar</p>
+                 </div>
+              </div>
+
+              {/* Forest - Rotting Weald */}
+              <div className="group bg-deep-black border border-white/5 rounded-2xl overflow-hidden hover:border-green-600/30 transition-all flex flex-col shadow-2xl">
+                 <div className="h-40 bg-gradient-to-br from-emerald-950 to-black relative">
+                    <div className="absolute inset-0 bg-green-900/10"></div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-deep-black to-transparent"></div>
+                    <h4 className="absolute bottom-4 left-6 text-2xl font-ornate text-white uppercase">Orman</h4>
+                 </div>
+                 <div className="p-6 space-y-4 flex-1">
+                    <h5 className="text-emerald-500 font-bold uppercase tracking-widest text-xs">Çürük Koru</h5>
+                    <p className="text-sm text-slate-400 leading-relaxed italic">"Ağaçların yaprakları siyah, gövdelerinden irin akar. Güneş asla yere ulaşmaz."</p>
+                    <p className="text-sm text-slate-300">
+                      <strong>Sessiz Manastır:</strong> Engizisyon'un bile çekindiği, dillerini kesmiş rahiplerin (Yeminsizler) yaşadığı eski tapınak.
+                    </p>
+                    <p className="text-xs text-slate-500 border-t border-white/5 pt-3">
+                      <em>Bilgi:</em> Ormanda çok kalanların derisinde mantarlar büyümeye başlar.
+                    </p>
+                    <p className="text-[10px] text-red-500/60 uppercase font-bold">Tehlike: Dev Örümcekler & Zehirli Sporlar</p>
+                 </div>
+              </div>
+
+              {/* Overseas - Broken Isles */}
+              <div className="group bg-deep-black border border-white/5 rounded-2xl overflow-hidden hover:border-teal-500/30 transition-all flex flex-col shadow-2xl">
+                 <div className="h-40 bg-gradient-to-br from-teal-950 to-slate-950 relative">
+                    <div className="absolute inset-0 bg-cyan-900/10"></div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-deep-black to-transparent"></div>
+                    <h4 className="absolute bottom-4 left-6 text-2xl font-ornate text-white uppercase">Deniz Aşırı</h4>
+                 </div>
+                 <div className="p-6 space-y-4 flex-1">
+                    <h5 className="text-teal-400 font-bold uppercase tracking-widest text-xs">Kırık Adalar</h5>
+                    <p className="text-sm text-slate-400 leading-relaxed italic">"Eski bir kıtanın su üstünde kalmış tepeleri. İmparatorluk soylularının batık sarayları."</p>
+                    <p className="text-sm text-slate-300">
+                      <strong>Hazine:</strong> En değerli büyülü "Eserler" (Artifacts) buradaki batık saraylardan çıkarılır.
+                    </p>
+                    <p className="text-xs text-slate-500 border-t border-white/5 pt-3">
+                      <em>Karanlık Sular:</em> Derinlerde Lovecraftvari deniz canavarları bekler.
+                    </p>
+                    <p className="text-[10px] text-red-500/60 uppercase font-bold">Tehlike: Deep Ones (Derindekiler)</p>
                  </div>
               </div>
            </div>
