@@ -120,7 +120,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onAuthSuccess }) => {
         {/* --- TIMELINE --- */}
         <div className="space-y-16">
            <div className="flex items-center gap-6">
-              <h3 className="text-3xl font-ornate text-white shrink-0">1. TARİHÇE (THE TIMELINE)</h3>
+              <h3 className="text-3xl font-ornate text-white shrink-0">1. TARİHÇE</h3>
               <div className="h-px bg-white/10 w-full"></div>
            </div>
            
