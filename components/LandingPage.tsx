@@ -39,10 +39,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onAuthSuccess }) => {
   };
 
   return (
-    <div className="min-h-screen w-full bg-deep-black text-slate-300 font-newsreader selection:bg-primary/30 overflow-x-hidden">
+    <div className="h-screen w-full bg-deep-black text-slate-300 font-newsreader selection:bg-primary/30 overflow-y-auto overflow-x-hidden scroll-smooth">
       
       {/* --- HERO SECTION --- */}
-      <section className="relative h-screen w-full flex flex-col items-center justify-center text-center px-6 overflow-hidden">
+      <section className="relative h-screen w-full flex flex-col items-center justify-center text-center px-6 overflow-hidden shrink-0">
         <div className="absolute inset-0 z-0">
           <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/40 to-deep-black z-10"></div>
           <img 
