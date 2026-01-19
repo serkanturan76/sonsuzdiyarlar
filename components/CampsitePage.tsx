@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { resetUserLimitByAd, supabase } from '../services/supabase';
 
@@ -6,10 +7,17 @@ interface CampsitePageProps {
   onReturnToGame: () => void;
 }
 
-// Global adBreak fonksiyonu için tip tanımı
+// Median.co (GoNative) Bridge Tip Tanımları
 declare global {
   interface Window {
-    adBreak: (args: any) => void;
+    gonative?: {
+      admob?: {
+        requestRewardedVideo: () => void;
+        showRewardedVideo: () => void;
+      }
+    };
+    // Median'ın geri çağıracağı global fonksiyon
+    onAdMobReward?: () => void; 
   }
 }
 
@@ -19,6 +27,7 @@ const CampsitePage: React.FC<CampsitePageProps> = ({ nextResetTime, onReturnToGa
   const [isAdLoading, setIsAdLoading] = useState(false);
 
   useEffect(() => {
+    // 1. Sayaç Mantığı
     if (!nextResetTime) {
         setCanReturn(true);
         return;
@@ -43,56 +52,68 @@ const CampsitePage: React.FC<CampsitePageProps> = ({ nextResetTime, onReturnToGa
       }
     }, 1000);
 
-    return () => clearInterval(interval);
-  }, [nextResetTime]);
+    // 2. Median.co Callback Tanımlaması
+    // Uygulama (Native), reklam izlendiğinde bu fonksiyonu tetikler.
+    window.onAdMobReward = async () => {
+        console.log("Median AdMob Reward Callback Tetiklendi");
+        try {
+            const { data: { user } } = await supabase?.auth.getUser() || { data: { user: null } };
+            if (user) {
+                await resetUserLimitByAd(user.id);
+                alert("Ruhun tazelendi! 10 yeni hamle kazandın.");
+                onReturnToGame();
+            } else {
+                alert("Kullanıcı oturumu bulunamadı.");
+            }
+        } catch (e) {
+            console.error("Ödül hatası:", e);
+        } finally {
+            setIsAdLoading(false);
+        }
+    };
+
+    return () => {
+        clearInterval(interval);
+        // Temizlik: Callback'i silmiyoruz çünkü global window üzerinde kalmalı
+    };
+  }, [nextResetTime, onReturnToGame]);
 
   const handleWatchAd = () => {
-    // SDK'nın yüklü olup olmadığını kontrol et
-    if (typeof window.adBreak !== 'function') {
-      console.warn("AdSense SDK henüz yüklenmedi veya engellendi.");
-      alert("Reklam şu anda yüklenemiyor. Lütfen reklam engelleyicinizi (AdBlock) kapatın.");
-      return;
-    }
-
     setIsAdLoading(true);
 
-    // Google H5 Games adBreak API kullanımı
-    window.adBreak({
-      type: 'reward',
-      name: 'refill_adventure_moves',
-      beforeAd: () => {
-        console.log("Reklam başlıyor, oyun seslerini kısın.");
-      },
-      afterAd: () => {
-        setIsAdLoading(false);
-        console.log("Reklam kapandı.");
-      },
-      adBreakDone: (placementInfo: any) => {
-        console.log("AdBreak tamamlandı:", placementInfo);
-      },
-      beforeReward: (showAdFn: () => void) => {
-        // Reklamı göstermeden önce kullanıcıya onay penceresi vs. çıkarılabilir
-        showAdFn();
-      },
-      adDismissed: () => {
-        console.log("Kullanıcı reklamı erken kapattı.");
-        alert("Ödül kazanmak için reklamı sonuna kadar izlemelisin.");
-      },
-      adViewed: async () => {
-        // REKLAM TAMAMEN İZLENDİ - ÖDÜLÜ VER
-        console.log("Reklam başarıyla izlendi, ödül veriliyor...");
-        try {
-          const { data: { user } } = await supabase?.auth.getUser() || { data: { user: null } };
-          if (user) {
-            await resetUserLimitByAd(user.id);
-            alert("Ruhun tazelendi! 10 yeni hamle kazandın.");
-            onReturnToGame(); 
-          }
-        } catch (e) {
-          console.error("Reward grant failed:", e);
+    // Eğer tarayıcıda test ediliyorsa (Median ortamı değilse)
+    if (!window.gonative) {
+        console.warn("Median/GoNative ortamı algılanmadı. Test modunda ödül veriliyor.");
+        // Geliştirme kolaylığı için simüle et
+        setTimeout(() => {
+            if (window.onAdMobReward) window.onAdMobReward();
+        }, 1500);
+        return;
+    }
+
+    // Median.co AdMob Bridge Çağrısı
+    // Native tarafa reklamı göstermesini söylüyoruz.
+    try {
+        // Reklamı önceden yüklemediyse talep et (genellikle otomatik yapılır ama garanti olsun)
+        if(window.gonative.admob && window.gonative.admob.requestRewardedVideo) {
+             window.gonative.admob.requestRewardedVideo();
         }
-      }
-    });
+        
+        // Reklamı göster
+        setTimeout(() => {
+            if (window.gonative && window.gonative.admob) {
+                window.gonative.admob.showRewardedVideo();
+            } else {
+                alert("Reklam modülü hazır değil.");
+                setIsAdLoading(false);
+            }
+        }, 500); // Küçük bir gecikme yükleme şansı tanır
+        
+    } catch (e) {
+        console.error("AdMob çağrı hatası:", e);
+        alert("Reklam yüklenirken bir hata oluştu.");
+        setIsAdLoading(false);
+    }
   };
 
   return (
@@ -161,14 +182,14 @@ const CampsitePage: React.FC<CampsitePageProps> = ({ nextResetTime, onReturnToGa
                     <button 
                         onClick={handleWatchAd}
                         disabled={isAdLoading}
-                        className="group relative flex w-full max-w-[300px] items-center justify-center overflow-hidden rounded-full border border-gold/50 h-14 px-6 bg-gradient-to-r from-amber-900 via-gold to-amber-900 text-white gap-3 shadow-[0_0_20px_rgba(207,130,23,0.4)] hover:shadow-[0_0_30px_rgba(207,130,23,0.6)] transition-all active:scale-95"
+                        className="group relative flex w-full max-w-[300px] items-center justify-center overflow-hidden rounded-full border border-gold/50 h-14 px-6 bg-gradient-to-r from-amber-900 via-gold to-amber-900 text-white gap-3 shadow-[0_0_20px_rgba(207,130,23,0.4)] hover:shadow-[0_0_30px_rgba(207,130,23,0.6)] transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <div className="absolute inset-0 opacity-20 pointer-events-none mix-blend-overlay" style={{backgroundImage: 'url("https://www.transparenttextures.com/patterns/carbon-fibre.png")'}}></div>
                         <span className="material-symbols-outlined text-white text-[24px] group-hover:rotate-12 transition-transform">
                             {isAdLoading ? 'sync' : 'play_circle'}
                         </span>
                         <span className="truncate text-sm font-bold uppercase tracking-[0.2em] drop-shadow-md">
-                            {isAdLoading ? 'Reklam Hazırlanıyor...' : 'Reklam İzle & Hemen Uyan'}
+                            {isAdLoading ? 'Reklam Yükleniyor...' : 'Reklam İzle & Hemen Uyan'}
                         </span>
                     </button>
                     <p className="text-[10px] text-white/30 uppercase tracking-tighter">+10 Hamle Kazan</p>
