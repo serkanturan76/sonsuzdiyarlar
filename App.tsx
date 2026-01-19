@@ -1,10 +1,12 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { GameState, StorySegment } from './types';
 import Sidebar from './components/Sidebar';
 import LandingPage from './components/LandingPage';
 import CampsitePage from './components/CampsitePage';
+import ArchivesPage from './components/ArchivesPage'; // Yeni import
 import { generateAdventureStep, generateSceneImage, generateSessionSummary } from './services/gemini';
-import { fetchWorldLore, fetchArchives, fetchLastLogForPlayer, saveGameLog, supabase, signOut, getUserLimits, decrementUserLimit } from './services/supabase';
+import { fetchWorldLore, fetchArchives, fetchLastLogForPlayer, fetchAllLogsForPlayer, saveGameLog, supabase, signOut, getUserLimits, decrementUserLimit } from './services/supabase';
 
 const INITIAL_STATE: GameState = {
   history: [],
@@ -12,7 +14,7 @@ const INITIAL_STATE: GameState = {
   quest: "Yolculuğuna başla.",
   isLoading: false,
   characterName: "",
-  remainingRequests: 10,
+  remainingRequests: 5, 
   nextResetTime: null,
 };
 
@@ -23,7 +25,7 @@ const LOADING_MESSAGES = [
   "Gerçeklik perdesi aralanıyor...",
 ];
 
-type ViewState = 'landing' | 'checking_limits' | 'game' | 'campsite';
+type ViewState = 'landing' | 'checking_limits' | 'archives' | 'game' | 'campsite';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<any>(null);
@@ -81,7 +83,7 @@ const App: React.FC = () => {
       setLoadingMessage("Yıldızlar hizalanıyor...");
       
       try {
-        // B) Check Limits & Reset Logic (handled in getUserLimits)
+        // B) Check Limits & Reset Logic
         const limits = await getUserLimits(user.id);
         
         setGameState(prev => ({
@@ -92,33 +94,43 @@ const App: React.FC = () => {
 
         // C) Route based on limits
         if (limits.request_count <= 0) {
-          // No requests left? Go to campsite immediately.
           setCurrentView('campsite');
-          // Do NOT proceed to game generation.
           return;
         }
 
-        // D) Requests available? Proceed to Game.
-        setCurrentView('game');
+        // D) Check for Past Logs (History Check)
+        const pastLogs = await fetchAllLogsForPlayer(gameState.characterName);
         
-        // E) Generate Initial Story ONLY if history is empty
-        if (gameState.history.length === 0) {
-            setGameState(prev => ({ ...prev, isLoading: true }));
-            setLoadingMessage("Mazi inceleniyor...");
-            
-            // Check logs specifically for THIS character name
-            const lastSummary = await fetchLastLogForPlayer(gameState.characterName);
-            const startPrompt = lastSummary 
-                ? `Geçmişten Devam Et: ${lastSummary}` 
-                : "Macerayı Başlat (Giriş Sahnesi)";
-            
-            // Force `isInitialLoad` to true to bypass strict checks in handleChoice
-            await handleChoice(startPrompt, lastSummary, true);
+        if (pastLogs.length > 0) {
+            // Eğer geçmiş varsa Arşiv sayfasına gönder
+            setCurrentView('archives');
+        } else {
+            // Geçmiş yoksa direkt oyuna başlat
+            startNewOrResumedGame();
         }
 
       } catch (e) {
         console.error("Init flow error", e);
         setCurrentView('landing'); 
+      }
+  };
+
+  const startNewOrResumedGame = async () => {
+      setCurrentView('game');
+      
+      // E) Generate Initial Story ONLY if history is empty
+      if (gameState.history.length === 0) {
+          setGameState(prev => ({ ...prev, isLoading: true }));
+          setLoadingMessage("Mazi inceleniyor...");
+          
+          // Check logs specifically for THIS character name (for resume prompt context)
+          const lastSummary = await fetchLastLogForPlayer(gameState.characterName);
+          const startPrompt = lastSummary 
+              ? `Geçmişten Devam Et: ${lastSummary}` 
+              : "Macerayı Başlat (Giriş Sahnesi)";
+          
+          // Force `isInitialLoad` to true to bypass strict checks in handleChoice
+          await handleChoice(startPrompt, lastSummary, true);
       }
   };
 
@@ -159,7 +171,6 @@ const App: React.FC = () => {
     // Safety check: Don't run if no requests
     if (gameState.remainingRequests <= 0 && gameState.history.length > 0) {
         alert("Gücün tükendi. Kamp ateşine dönmelisin.");
-        // We don't force campsite view here immediately to allow user to save via sidebar
         return;
     }
     
@@ -304,6 +315,16 @@ const App: React.FC = () => {
 
   if (currentView === 'campsite') {
       return <CampsitePage nextResetTime={gameState.nextResetTime} onReturnToGame={onCampsiteWakeUp} />;
+  }
+
+  // --- YENİ EKLENEN VIEW ---
+  if (currentView === 'archives') {
+      return (
+        <ArchivesPage 
+            characterName={gameState.characterName} 
+            onContinueGame={() => startNewOrResumedGame()} 
+        />
+      );
   }
 
   if (!user || !gameState.characterName || currentView === 'landing') {

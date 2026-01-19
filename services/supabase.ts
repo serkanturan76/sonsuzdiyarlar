@@ -55,6 +55,24 @@ export const fetchLastLogForPlayer = async (playerName: string): Promise<string 
   }
 };
 
+// --- YENİ EKLENEN FONKSİYON ---
+export const fetchAllLogsForPlayer = async (playerName: string): Promise<{created_at: string, summary: string}[]> => {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('game_logs')
+      .select('created_at, summary')
+      .eq('player_name', playerName)
+      .order('created_at', { ascending: false });
+      
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error("Log fetch error:", error);
+    return [];
+  }
+};
+
 export const saveGameLog = async (playerName: string, summary: string) => {
   if (!supabase) return;
   await supabase.from('game_logs').insert([{ player_name: playerName, summary: summary }]);
@@ -76,7 +94,8 @@ export const signOut = () => supabase?.auth.signOut();
 // --- LIMIT TRACKING METHODS ---
 
 export const getUserLimits = async (userId: string): Promise<UserLimit> => {
-  const defaultLimit = { request_count: 10, last_reset_at: new Date().toISOString() };
+  // Varsayılan limit artık 5
+  const defaultLimit = { request_count: 5, last_reset_at: new Date().toISOString() };
   if (!supabase) return defaultLimit;
 
   try {
@@ -89,16 +108,18 @@ export const getUserLimits = async (userId: string): Promise<UserLimit> => {
     const now = new Date();
 
     if (!data) {
-      const newLimitPayload = { user_id: userId, request_count: 10, last_reset_at: now.toISOString() };
+      // Yeni kullanıcı oluştururken limit 5
+      const newLimitPayload = { user_id: userId, request_count: 5, last_reset_at: now.toISOString() };
       await supabase.from('user_limits').insert(newLimitPayload);
-      return { request_count: 10, last_reset_at: now.toISOString() };
+      return { request_count: 5, last_reset_at: now.toISOString() };
     }
 
     const lastReset = new Date(data.last_reset_at);
     const diffHours = Math.abs(now.getTime() - lastReset.getTime()) / (1000 * 60 * 60);
 
+    // 24 saat geçtiyse limiti 5 olarak yenile
     if (diffHours >= 24) {
-      const refreshedLimit = { request_count: 10, last_reset_at: now.toISOString() };
+      const refreshedLimit = { request_count: 5, last_reset_at: now.toISOString() };
       await supabase.from('user_limits').update(refreshedLimit).eq('user_id', userId);
       return refreshedLimit;
     }
@@ -110,7 +131,7 @@ export const getUserLimits = async (userId: string): Promise<UserLimit> => {
 };
 
 export const decrementUserLimit = async (userId: string): Promise<number> => {
-  if (!supabase) return 10;
+  if (!supabase) return 5; // Fallback de 5 oldu
   try {
     const { data } = await supabase.from('user_limits').select('request_count').eq('user_id', userId).single();
     if (data && data.request_count > 0) {
@@ -127,8 +148,6 @@ export const decrementUserLimit = async (userId: string): Promise<number> => {
 export const resetUserLimitByAd = async (userId: string): Promise<number> => {
   if (!supabase) return 10;
   try {
-    // Reklam izlendiği için 10 yeni hak veriyoruz. 
-    // Not: last_reset_at'i güncellemiyoruz ki normal 24 saatlik döngü bozulmasın, sadece mevcut hak artsın.
     const newCount = 10;
     await supabase.from('user_limits').update({ request_count: newCount }).eq('user_id', userId);
     return newCount;
