@@ -55,7 +55,6 @@ export const fetchLastLogForPlayer = async (playerName: string): Promise<string 
   }
 };
 
-// --- YENİ EKLENEN FONKSİYON ---
 export const fetchAllLogsForPlayer = async (playerName: string): Promise<{created_at: string, summary: string}[]> => {
   if (!supabase) return [];
   try {
@@ -69,6 +68,29 @@ export const fetchAllLogsForPlayer = async (playerName: string): Promise<{create
     return data || [];
   } catch (error) {
     console.error("Log fetch error:", error);
+    return [];
+  }
+};
+
+// --- YENİ EKLENEN FONKSİYON: BENZERSİZ KARAKTER İSİMLERİ ---
+export const fetchUniquePlayerNames = async (): Promise<string[]> => {
+  if (!supabase) return [];
+  try {
+    // Tüm logları çekip JS tarafında filtrelemek (benzersiz yapmak)
+    // Not: Büyük veride .distinct() veya rpc kullanımı daha iyidir ama şu an için yeterli.
+    const { data, error } = await supabase
+      .from('game_logs')
+      .select('player_name')
+      .order('created_at', { ascending: false });
+      
+    if (error) throw error;
+    
+    // Set kullanarak benzersiz isimleri al
+    const rawNames: string[] = data ? data.map((d: any) => d.player_name as string) : [];
+    const names = new Set<string>(rawNames);
+    return Array.from(names);
+  } catch (error) {
+    console.error("Player names fetch error:", error);
     return [];
   }
 };
@@ -94,7 +116,6 @@ export const signOut = () => supabase?.auth.signOut();
 // --- LIMIT TRACKING METHODS ---
 
 export const getUserLimits = async (userId: string): Promise<UserLimit> => {
-  // Varsayılan limit artık 5
   const defaultLimit = { request_count: 5, last_reset_at: new Date().toISOString() };
   if (!supabase) return defaultLimit;
 
@@ -108,7 +129,6 @@ export const getUserLimits = async (userId: string): Promise<UserLimit> => {
     const now = new Date();
 
     if (!data) {
-      // Yeni kullanıcı oluştururken limit 5
       const newLimitPayload = { user_id: userId, request_count: 5, last_reset_at: now.toISOString() };
       await supabase.from('user_limits').insert(newLimitPayload);
       return { request_count: 5, last_reset_at: now.toISOString() };
@@ -117,7 +137,6 @@ export const getUserLimits = async (userId: string): Promise<UserLimit> => {
     const lastReset = new Date(data.last_reset_at);
     const diffHours = Math.abs(now.getTime() - lastReset.getTime()) / (1000 * 60 * 60);
 
-    // 24 saat geçtiyse limiti 5 olarak yenile
     if (diffHours >= 24) {
       const refreshedLimit = { request_count: 5, last_reset_at: now.toISOString() };
       await supabase.from('user_limits').update(refreshedLimit).eq('user_id', userId);
@@ -131,7 +150,7 @@ export const getUserLimits = async (userId: string): Promise<UserLimit> => {
 };
 
 export const decrementUserLimit = async (userId: string): Promise<number> => {
-  if (!supabase) return 5; // Fallback de 5 oldu
+  if (!supabase) return 5;
   try {
     const { data } = await supabase.from('user_limits').select('request_count').eq('user_id', userId).single();
     if (data && data.request_count > 0) {

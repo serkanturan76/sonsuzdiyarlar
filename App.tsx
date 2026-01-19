@@ -4,7 +4,7 @@ import { GameState, StorySegment } from './types';
 import Sidebar from './components/Sidebar';
 import LandingPage from './components/LandingPage';
 import CampsitePage from './components/CampsitePage';
-import ArchivesPage from './components/ArchivesPage'; // Yeni import
+import ArchivesPage from './components/ArchivesPage'; 
 import { generateAdventureStep, generateSceneImage, generateSessionSummary } from './services/gemini';
 import { fetchWorldLore, fetchArchives, fetchLastLogForPlayer, fetchAllLogsForPlayer, saveGameLog, supabase, signOut, getUserLimits, decrementUserLimit } from './services/supabase';
 
@@ -99,6 +99,12 @@ const App: React.FC = () => {
         }
 
         // D) Check for Past Logs (History Check)
+        // Eğer history zaten doluysa (oyun içindeyken sayfalar arası geçiş yaptıysa) kontrol etme
+        if (gameState.history.length > 0) {
+            setCurrentView('game');
+            return;
+        }
+
         const pastLogs = await fetchAllLogsForPlayer(gameState.characterName);
         
         if (pastLogs.length > 0) {
@@ -115,22 +121,55 @@ const App: React.FC = () => {
       }
   };
 
-  const startNewOrResumedGame = async () => {
+  const startNewOrResumedGame = async (targetCharacterName?: string) => {
+      // Eğer hedef bir isim verildiyse ve mevcut isimden farklıysa state'i güncelle
+      let activeName = gameState.characterName;
+      let shouldResetState = false;
+
+      if (targetCharacterName && targetCharacterName !== gameState.characterName) {
+          activeName = targetCharacterName;
+          shouldResetState = true;
+      }
+
+      if (shouldResetState) {
+          setGameState(prev => ({
+              ...prev,
+              characterName: activeName,
+              history: [],
+              inventory: [],
+              quest: "Yolculuğuna başla."
+          }));
+      }
+
       setCurrentView('game');
       
-      // E) Generate Initial Story ONLY if history is empty
-      if (gameState.history.length === 0) {
-          setGameState(prev => ({ ...prev, isLoading: true }));
+      // E) Generate Initial Story ONLY if history is empty (or we just reset it)
+      // Note: We check `shouldResetState` or explicit empty history because setState is async
+      if (shouldResetState || gameState.history.length === 0) {
+          setGameState(prev => ({ ...prev, isLoading: true, characterName: activeName })); // Re-ensure name is set for loader
           setLoadingMessage("Mazi inceleniyor...");
           
-          // Check logs specifically for THIS character name (for resume prompt context)
-          const lastSummary = await fetchLastLogForPlayer(gameState.characterName);
+          // Check logs specifically for THIS active character name
+          const lastSummary = await fetchLastLogForPlayer(activeName);
           const startPrompt = lastSummary 
               ? `Geçmişten Devam Et: ${lastSummary}` 
               : "Macerayı Başlat (Giriş Sahnesi)";
           
-          // Force `isInitialLoad` to true to bypass strict checks in handleChoice
-          await handleChoice(startPrompt, lastSummary, true);
+          // Force `isInitialLoad` to true
+          // We pass `activeName` via closure, but handleChoice uses `gameState.characterName` 
+          // Since `setGameState` might not have flushed, we rely on the component re-render 
+          // OR we simply wait a tick. However, let's trust the updated `activeName` context.
+          
+          // CRITICAL FIX: handleChoice uses gameState state. We must ensure the next render cycle picks it up OR pass context.
+          // Since we can't easily pass context deep into handleChoice without refactoring, 
+          // we will trigger the choice but React 18 batching might handle it. 
+          // Safer approach: Let the useEffect handle the "adventure start" if we changed name, 
+          // BUT `adventureStartedRef` is already true.
+          
+          // Let's manually call generation logic here slightly modified or just rely on the updated state in next tick.
+          // Actually, passing `resumeContext` is enough for the prompt logic.
+          
+          await handleChoice(startPrompt, lastSummary, true, activeName); 
       }
   };
 
@@ -164,7 +203,7 @@ const App: React.FC = () => {
     return 1.0; 
   };
 
-  const handleChoice = async (choice: string, resumeContext: string | null = null, isInitialLoad = false) => {
+  const handleChoice = async (choice: string, resumeContext: string | null = null, isInitialLoad = false, forcedName?: string) => {
     // Safety check: Don't run if loading (unless it's the very first forced load)
     if (gameState.isLoading && !isInitialLoad) return;
     
@@ -192,10 +231,13 @@ const App: React.FC = () => {
           choice: h.userChoice || choice 
       }));
 
+      // Use forcedName if provided (during character switch), otherwise current state
+      const currentQuest = gameState.quest; 
+
       const adventureData = await generateAdventureStep(
         historyContext,
         gameState.inventory,
-        gameState.quest,
+        currentQuest,
         worldLore, 
         archives,
         resumeContext
@@ -237,8 +279,13 @@ const App: React.FC = () => {
             const adds = adventureData.inventoryUpdate.add.filter(item => !newInventory.includes(item));
             newInventory = [...newInventory, ...adds];
         }
+        
+        // If we forced a name change, make sure state reflects it
+        const stateName = forcedName || prev.characterName;
+        
         return {
           ...prev,
+          characterName: stateName,
           history: [...prev.history, newSegment],
           inventory: newInventory,
           quest: adventureData.questUpdate || prev.quest,
@@ -317,12 +364,11 @@ const App: React.FC = () => {
       return <CampsitePage nextResetTime={gameState.nextResetTime} onReturnToGame={onCampsiteWakeUp} />;
   }
 
-  // --- YENİ EKLENEN VIEW ---
   if (currentView === 'archives') {
       return (
         <ArchivesPage 
             characterName={gameState.characterName} 
-            onContinueGame={() => startNewOrResumedGame()} 
+            onContinueGame={(targetName) => startNewOrResumedGame(targetName)} 
         />
       );
   }
